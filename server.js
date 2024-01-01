@@ -1,13 +1,21 @@
-const { getSecondsString } = require("./lib/time");
-const sanitize = require("./lib/string").sanitize;
+const { getTimeString } = require("./lib/time");
 const { XMLParser } = require("fast-xml-parser");
+const { sanitize } = require("./lib/string");
 const WebSocket = require("ws");
 require("dotenv").config();
-const fs = require("fs");
 
 const players = require("./data/players.js");
 const soldiers = require("./data/soldiers.js");
 const tools = require("./data/tools.js");
+
+const username = process.env.USERNAMEE;
+const password = process.env.PASSWORD;
+const accountId = process.env.ACCOUNT_ID;
+const allianceId = process.env.ALLIANCE_ID;
+
+if (!username || !password || !accountId || !allianceId) {
+    throw new Error("Missing environment variables.");
+}
 
 const servers = {};
 getServers();
@@ -56,10 +64,10 @@ function connect(header) {
             `%xt%EmpireEx_3%vck%1%1093006%web-html5%<RoundHouseKick>%1.6082669484889843e+308%`
         );
 
-        socket.send(`%xt%EmpireEx_3%vln%1%{"NOM":"Vroom"}%`);
+        socket.send(`%xt%EmpireEx_3%vln%1%{"NOM":"${username}"}%`);
 
         socket.send(
-            `%xt%EmpireEx_3%lli%1%{"CONM":112,"RTM":20,"ID":0,"PL":1,"NOM":"Vroom","PW":"DKTP5500!!5","LT":null,"LANG":"en","DID":"0","AID":"1703974736400259827","KID":"","REF":"https://empire.goodgamestudios.com","GCI":"","SID":9,"PLFID":1}%`
+            `%xt%EmpireEx_3%lli%1%{"CONM":112,"RTM":20,"ID":0,"PL":1,"NOM":"${username}","PW":"${password}","LT":null,"LANG":"en","DID":"0","AID":"${allianceId}","KID":"","REF":"https://empire.goodgamestudios.com","GCI":"","SID":9,"PLFID":1}%`
         );
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -88,7 +96,7 @@ function connect(header) {
                 pingSocket(socket, header);
             } else if (response.code === "21") {
                 socket.send(
-                    `%xt%${header}%lre%1%{"DID":0,"CONM":515,"RTM":60,"campainPId":-1,"campainCr":-1,"campainLP":-1,"adID":-1,"timeZone":14,"username":"Vroom","email":null,"password":"DKTP5500!!5","accountId":"1701342315180714068","ggsLanguageCode":"en","referrer":"https://empire.goodgamestudios.com","distributorId":0,"connectionTime":515,"roundTripTime":60,"campaignVars":";https://empire.goodgamestudios.com;;;;;;-1;-1;;1681390746855129824;0;;;;;","campaignVars_adid":"-1","campaignVars_lp":"-1","campaignVars_creative":"-1","campaignVars_partnerId":"-1","campaignVars_websiteId":"0","timezone":14,"PN":"Vroom","PW":"DKTP5500!!5","REF":"https://empire.goodgamestudios.com","LANG":"fr","AID":"1681390746855129824","GCI":"","SID":9,"PLFID":1,"NID":1,"IC":""}%`
+                    `%xt%${header}%lre%1%{"DID":0,"CONM":515,"RTM":60,"campainPId":-1,"campainCr":-1,"campainLP":-1,"adID":-1,"timeZone":14,"username":"${username}","email":null,"password":"${password}","accountId":"${accountId}","ggsLanguageCode":"en","referrer":"https://empire.goodgamestudios.com","distributorId":0,"connectionTime":515,"roundTripTime":60,"campaignVars":";https://empire.goodgamestudios.com;;;;;;-1;-1;;1681390746855129824;0;;;;;","campaignVars_adid":"-1","campaignVars_lp":"-1","campaignVars_creative":"-1","campaignVars_partnerId":"-1","campaignVars_websiteId":"0","timezone":14,"PN":"${username}","PW":"${password}","REF":"https://empire.goodgamestudios.com","LANG":"fr","AID":"${allianceId}","GCI":"","SID":9,"PLFID":1,"NID":1,"IC":""}%`
                 );
             } else {
                 socket.close();
@@ -192,7 +200,7 @@ function connect(header) {
 
             // To know when it's gonna land, substract the time travelled to the travel time
             const timeToLand = travelTime - timeTravelled;
-            const timeRemaining = getSecondsString(timeToLand);
+            const timeRemaining = getTimeString(timeToLand);
 
             const date = new Date();
             date.setSeconds(date.getSeconds() + timeToLand);

@@ -29,6 +29,7 @@ const allianceLogsRead = [];
 let alreadyLoggedFirstAllianceLogs = false;
 
 const messages = [];
+const attacksLogged = [];
 
 // getUnits();
 
@@ -265,7 +266,7 @@ function connect(header) {
                 Nombre de troupes estimé: ${estimatedNumberOfTroops}
 
                 Alliance: ${attackingAlliance || "Sans Alliance"}
-                
+
                 Temps restant: ${timeRemaining}
                 Date d'arrivée: ${arrivalDateRelative}
             `;
@@ -312,16 +313,37 @@ function connect(header) {
             };
 
             try {
-                const res = await fetch(webhookUrlAttacks, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(webhookData),
-                });
+                const attackId = content["M"][0]["M"]["MID"];
+                const alreadyLogged = attacksLogged.find((attack) => attack.id === attackId);
 
-                if (res.status !== 204) {
-                    console.log("Error while sending message to Discord.");
+                // If already logged, update the message
+                // If not, create a new message
+                if (alreadyLogged) {
+                    const res = await fetch(
+                        `${webhookUrlAttacks}/messages/${alreadyLogged.messageId}`,
+                        {
+                            method: "PATCH",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(webhookData),
+                        }
+                    );
+                } else {
+                    const res = await fetch(`${webhookUrlAttacks}?wait=true`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(webhookData),
+                    });
+
+                    const message = await res.text();
+
+                    attacksLogged.push({
+                        id: attackId,
+                        messageId: JSON.parse(message)["id"],
+                    });
                 }
             } catch (error) {
                 console.log(error);

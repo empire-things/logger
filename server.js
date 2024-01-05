@@ -1,12 +1,12 @@
-const { login, displayMessage } = require("./lib/functions.js");
-const { sendSms, sendCall } = require("./lib/sms-call.js");
-const { XMLParser } = require("fast-xml-parser");
-const { getTimeString } = require("./lib/time.js");
-const { getUnits } = require("./lib/getData.js");
-const { sanitize } = require("./lib/string.js");
-const players = require("./data/players.js");
-const WebSocket = require("ws");
-require("dotenv").config();
+import { login, displayMessage } from "./lib/functions.js";
+import { sendSms, sendCall } from "./lib/sms-call.js";
+import { getTimeString } from "./lib/time.js";
+import { getUnits } from "./lib/getData.js";
+import { players } from "./data/players.js";
+import { sanitize } from "./lib/string.js";
+import { server } from "./lib/server.js";
+import WebSocket from "ws";
+import "dotenv/config";
 
 const username = process.env.USERNAMEE;
 const password = process.env.PASSWORD;
@@ -30,6 +30,13 @@ if (
 }
 
 let soldiers, tools;
+connect();
+
+const messages = [];
+const attacksLogged = [];
+const allianceLogsRead = [];
+const phoneMessagesSent = [];
+let alreadyLoggedFirstAllianceLogs = false;
 
 getUnits()
     .then((units) => {
@@ -39,35 +46,6 @@ getUnits()
     .catch((error) => {
         throw new Error(`Error while getting units: ${error}`);
     });
-
-let server = {};
-getServer();
-
-const messages = [];
-const attacksLogged = [];
-const allianceLogsRead = [];
-const phoneMessagesSent = [];
-let alreadyLoggedFirstAllianceLogs = false;
-
-async function getServer() {
-    const serversUrl = "https://empire-html5.goodgamestudios.com/config/network/1.xml";
-    const serversFile = new XMLParser().parse(await fetch(serversUrl).then((res) => res.text()));
-
-    for (instance of serversFile.network.instances.instance) {
-        if (instance.zone === "EmpireEx_3") {
-            server = {
-                zone: instance.zone,
-                url: `wss://${instance.server}`,
-                socket: new WebSocket(`wss://${instance.server}`),
-                reconnect: true,
-                message: {},
-                response: "",
-            };
-
-            connect();
-        }
-    }
-}
 
 function connect() {
     const socket = server.socket;
@@ -498,3 +476,77 @@ function pingSocket() {
         setTimeout(() => pingSocket(), 60000);
     }
 }
+
+import { Client, Collection, GatewayIntentBits, Partials, ActivityType } from "discord.js";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+import "dotenv/config";
+
+const clientOptions = {
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildPresences,
+        GatewayIntentBits.GuildVoiceStates,
+    ],
+    presence: {
+        status: "online",
+        activities: [
+            {
+                name: "Playing Goodgame Empire",
+                type: ActivityType.Playing,
+            },
+        ],
+    },
+    partials: [Partials.Channel],
+};
+
+export const client = new Client(clientOptions);
+
+// Events
+const eventsPath = join(process.cwd(), "events");
+const eventFiles = readdirSync(eventsPath).filter(
+    (file) => file.endsWith(".js") || file.endsWith(".ts")
+);
+
+for (const file of eventFiles) {
+    const url = `file:///${join(eventsPath, file)}`;
+    const eventFile = await import(url);
+
+    if (eventFile.once) {
+        client.once(eventFile.name, (...args) => eventFile.execute(...args));
+    } else if (eventFile.once === false) {
+        client.on(eventFile.name, (...args) => eventFile.execute(...args));
+    }
+}
+
+// Commands
+client.commands = new Collection();
+client.cooldowns = new Collection();
+
+const foldersPath = join(process.cwd(), "commands");
+const commandFolders = readdirSync(foldersPath);
+
+for (const folder of commandFolders) {
+    const commandsPath = join(foldersPath, folder);
+    const commandFiles = readdirSync(commandsPath).filter(
+        (file) => file.endsWith(".js") || file.endsWith(".ts")
+    );
+
+    for (const file of commandFiles) {
+        const url = `file:///${join(commandsPath, file)}`;
+        const commandFile = await import(url);
+
+        if (commandFile.data && commandFile.execute) {
+            client.commands.set(commandFile.data.name, commandFile);
+        } else {
+            console.log(
+                `[WARNING] The command at ${url} is missing a required "data" or "execute" property.`
+            );
+        }
+    }
+}
+
+client.login(process.env.CLIENT_TOKEN);

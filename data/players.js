@@ -1,4 +1,4 @@
-const players = [
+export const players = [
     {
         username: "Vroom",
         discordIds: ["867093779844431922"],
@@ -85,5 +85,3 @@ const players = [
         discordIds: ["599980508100689948"],
     },
 ];
-
-module.exports = players;

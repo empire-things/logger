@@ -29,9 +29,16 @@ if (
     throw new Error("Missing environment variables.");
 }
 
-const { soldiers, tools } = getUnits().catch((error) => {
-    throw new Error(`Error while getting units: ${error}`);
-});
+let soldiers, tools;
+
+getUnits()
+    .then((units) => {
+        soldiers = units.soldiers;
+        tools = units.tools;
+    })
+    .catch((error) => {
+        throw new Error(`Error while getting units: ${error}`);
+    });
 
 let server = {};
 getServer();

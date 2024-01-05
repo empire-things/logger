@@ -1,92 +1,55 @@
-const { getTimeString } = require("./lib/time");
+const { login, displayMessage } = require("./lib/functions.js");
+const { sendSms, sendCall } = require("./lib/sms-call.js");
 const { XMLParser } = require("fast-xml-parser");
-const { sanitize } = require("./lib/string");
+const { getTimeString } = require("./lib/time.js");
+const { getUnits } = require("./lib/getData.js");
+const { sanitize } = require("./lib/string.js");
+const players = require("./data/players.js");
 const WebSocket = require("ws");
 require("dotenv").config();
-const fs = require("fs");
-
-const players = require("./data/players.js");
-const soldiers = require("./data/soldiers.js");
-const tools = require("./data/tools.js");
-const { login, displayMessage } = require("./lib/functions.js");
 
 const username = process.env.USERNAMEE;
 const password = process.env.PASSWORD;
 const accountId = process.env.ACCOUNT_ID;
 const allianceId = process.env.ALLIANCE_ID;
 
-if (!username || !password || !accountId || !allianceId) {
-    throw new Error("Missing environment variables.");
-}
-
-const servers = {};
-getServers();
-
 const webhookUrlAttacks = process.env.WEBHOOK_URL_ATTACKS;
 const webhookUrlAllianceChat = process.env.WEBHOOK_URL_ALLIANCE_CHAT;
 const webhookUrlAllianceLogs = process.env.WEBHOOK_URL_ALLIANCE_LOGS;
-const allianceLogsRead = [];
-let alreadyLoggedFirstAllianceLogs = false;
+
+if (
+    !username ||
+    !password ||
+    !accountId ||
+    !allianceId ||
+    !webhookUrlAttacks ||
+    !webhookUrlAllianceChat ||
+    !webhookUrlAllianceLogs
+) {
+    throw new Error("Missing environment variables.");
+}
+
+const { soldiers, tools } = getUnits().catch((error) => {
+    throw new Error(`Error while getting units: ${error}`);
+});
+
+let server = {};
+getServer();
 
 const messages = [];
 const attacksLogged = [];
+const allianceLogsRead = [];
+const phoneMessagesSent = [];
+let alreadyLoggedFirstAllianceLogs = false;
 
-// getUnits();
-
-async function getUnits() {
-    const versionUrl =
-        "https://empire-html5.goodgamestudios.com/default/items/ItemsVersion.properties";
-    const versionFile = await fetch(versionUrl).then((res) => res.text());
-
-    const version = versionFile.split("=")[1].trim();
-
-    const itemsUrl = `https://empire-html5.goodgamestudios.com/default/items/items_v${version}.json`;
-    const itemsFile = await fetch(itemsUrl).then((res) => res.json());
-    const units = itemsFile.units;
-
-    const tools = units.filter((unit) => !!unit.typ);
-    const soldiers = units.filter((unit) => !unit.typ);
-
-    const soldiersFile = fs.createWriteStream("./data/soldiers.js");
-    // Create array named soldiers with all soldiers and export it
-    soldiersFile.write(`const soldiers = [\n`);
-    soldiers.forEach((soldier) => {
-        if (soldier.level) {
-            soldiersFile.write(
-                `    { id: ${soldier.wodID}, name: "${soldier.comment2}", level: "${soldier.level}" },\n`
-            );
-        } else {
-            soldiersFile.write(`    { id: ${soldier.wodID}, name: "${soldier.comment2}" },\n`);
-        }
-    });
-
-    soldiersFile.write(`];\n\nmodule.exports = soldiers;`);
-    soldiersFile.end();
-
-    const toolsFile = fs.createWriteStream("./data/tools.js");
-    // Create array named tools with all tools and export it
-    toolsFile.write(`const tools = [\n`);
-    tools.forEach((tool) => {
-        if (tool.level) {
-            toolsFile.write(
-                `    { id: ${tool.wodID}, name: "${tool.comment2}", level: "${tool.level}" },\n`
-            );
-        } else {
-            toolsFile.write(`    { id: ${tool.wodID}, name: "${tool.comment2}" },\n`);
-        }
-    });
-
-    toolsFile.write(`];\n\nmodule.exports = tools;`);
-    toolsFile.end();
-}
-
-async function getServers() {
+async function getServer() {
     const serversUrl = "https://empire-html5.goodgamestudios.com/config/network/1.xml";
     const serversFile = new XMLParser().parse(await fetch(serversUrl).then((res) => res.text()));
 
     for (instance of serversFile.network.instances.instance) {
         if (instance.zone === "EmpireEx_3") {
-            servers[instance.zone] = {
+            server = {
+                zone: instance.zone,
                 url: `wss://${instance.server}`,
                 socket: new WebSocket(`wss://${instance.server}`),
                 reconnect: true,
@@ -94,13 +57,13 @@ async function getServers() {
                 response: "",
             };
 
-            connect(instance.zone);
+            connect();
         }
     }
 }
 
-function connect(header) {
-    const socket = servers[header].socket;
+function connect() {
+    const socket = server.socket;
 
     socket.addEventListener("open", async (event) => {
         login(socket, username, password, allianceId);
@@ -114,33 +77,32 @@ function connect(header) {
     socket.addEventListener("message", async (event) => {
         const message = event.data.toString().split("%");
 
+        const command = message[2];
+        const code = message[4];
         const data = {
-            server: header,
-            command: message[2],
-            code: message[4],
-            content: JSON.parse(JSON.stringify(message[5] || "{}")),
+            content: message[5],
         };
 
-        if (data.command === "lli") {
-            if (data.code === "0") {
-                pingSocket(socket, header);
-            } else if (data.code === "21") {
+        if (command === "lli") {
+            if (code === "0") {
+                pingSocket();
+            } else if (code === "21") {
                 socket.send(
-                    `%xt%${header}%lre%1%{"DID":0,"CONM":515,"RTM":60,"campainPId":-1,"campainCr":-1,"campainLP":-1,"adID":-1,"timeZone":14,"username":"${username}","email":null,"password":"${password}","accountId":"${accountId}","ggsLanguageCode":"en","referrer":"https://empire.goodgamestudios.com","distributorId":0,"connectionTime":515,"roundTripTime":60,"campaignVars":";https://empire.goodgamestudios.com;;;;;;-1;-1;;1681390746855129824;0;;;;;","campaignVars_adid":"-1","campaignVars_lp":"-1","campaignVars_creative":"-1","campaignVars_partnerId":"-1","campaignVars_websiteId":"0","timezone":14,"PN":"${username}","PW":"${password}","REF":"https://empire.goodgamestudios.com","LANG":"fr","AID":"${allianceId}","GCI":"","SID":9,"PLFID":1,"NID":1,"IC":""}%`
+                    `%xt%${server.zone}%lre%1%{"DID":0,"CONM":515,"RTM":60,"campainPId":-1,"campainCr":-1,"campainLP":-1,"adID":-1,"timeZone":14,"username":"${username}","email":null,"password":"${password}","accountId":"${accountId}","ggsLanguageCode":"en","referrer":"https://empire.goodgamestudios.com","distributorId":0,"connectionTime":515,"roundTripTime":60,"campaignVars":";https://empire.goodgamestudios.com;;;;;;-1;-1;;1681390746855129824;0;;;;;","campaignVars_adid":"-1","campaignVars_lp":"-1","campaignVars_creative":"-1","campaignVars_partnerId":"-1","campaignVars_websiteId":"0","timezone":14,"PN":"${username}","PW":"${password}","REF":"https://empire.goodgamestudios.com","LANG":"fr","AID":"${allianceId}","GCI":"","SID":9,"PLFID":1,"NID":1,"IC":""}%`
                 );
             } else {
                 socket.close();
             }
-        } else if (data.command === "lre") {
-            if (data.code === "0") {
-                pingSocket(socket, header);
+        } else if (command === "lre") {
+            if (code === "0") {
+                pingSocket();
             } else {
-                servers[header].reconnect = false;
+                server.reconnect = false;
                 socket.close();
             }
         }
 
-        if (data.command === "sne") {
+        if (command === "sne") {
             return;
             // Private message
             const content = JSON.parse(data.content);
@@ -155,7 +117,7 @@ function connect(header) {
             socket.send(`%xt%EmpireEx_3%rms%1%{"MID":${messageId}}%`);
         }
 
-        if (data.command === "rms") {
+        if (command === "rms") {
             return;
             // Read message
             const content = JSON.parse(data.content);
@@ -168,9 +130,10 @@ function connect(header) {
             displayMessage(title, message);
         }
 
-        if (data.command === "gam") {
+        if (command === "gam") {
             // Attack / Support
             const content = JSON.parse(data.content);
+            if (!content["O"]) return;
             const currentAllianceName = "THE INSANES"; // TODO: get alliance name programmatically
 
             const firstPlayer = content["O"][0];
@@ -250,6 +213,10 @@ function connect(header) {
                 courtyard.forEach((item) => getAmount(item, "courtyard"));
             }
 
+            if (!estimatedNumberOfTroops && !numberOfTroops.total) {
+                return;
+            }
+
             const travelTime = content["M"][0]["M"]["TT"]; // in seconds
             const timeTravelled = content["M"][0]["M"]["PT"]; // in seconds
 
@@ -303,8 +270,55 @@ function connect(header) {
 
             // if can find player, send a ping
             const player = players.find((player) => player.username === attackedUsername);
-            if (player && (!player.minTroops || numberOfTroops >= player.minTroops)) {
-                message = `<@${player.discordId}>`;
+            if (player) {
+                if (!player.minTroops || numberOfTroops >= player.minTroops) {
+                    player.discordIds.forEach((discordId) => {
+                        message += `<@${discordId}> `;
+                    });
+                }
+
+                const hasMessageBeenSent = phoneMessagesSent.find(
+                    (message) => message.attackId === content["M"][0]["M"]["MID"]
+                );
+
+                if (player.telephone && !hasMessageBeenSent) {
+                    try {
+                        const { number, minTroops, sms, call } = player.telephone;
+
+                        if (
+                            numberOfTroops.total >= minTroops ||
+                            estimatedNumberOfTroops >= minTroops
+                        ) {
+                            if (sms) {
+                                sendSms(
+                                    `
+                                Vous êtes attaqués sur GGE par ${attackingUsername} de l'alliance ${attackingAlliance} !
+                                L'attaque arrivera dans ${timeRemaining} avec ${
+                                        estimatedNumberOfTroops
+                                            ? "environ " + estimatedNumberOfTroops
+                                            : numberOfTroops.total
+                                    } soldats`,
+                                    number
+                                );
+                            }
+
+                            if (call) {
+                                sendCall(
+                                    `Vous êtes attaqués sur G G E par ${attackingUsername} !`,
+                                    number
+                                );
+                            }
+
+                            if (call || sms) {
+                                phoneMessagesSent.push({
+                                    attackId: content["M"][0]["M"]["MID"],
+                                });
+                            }
+                        }
+                    } catch (error) {
+                        console.log(error);
+                    }
+                }
             }
 
             const webhookData = {
@@ -343,6 +357,11 @@ function connect(header) {
                     attacksLogged.push({
                         id: attackId,
                         messageId: JSON.parse(message)["id"],
+                        attacker: attackingUsername,
+                        attacked: attackedUsername,
+                        estimatedNumberOfTroops,
+                        numberOfTroops,
+                        date,
                     });
                 }
             } catch (error) {
@@ -350,7 +369,42 @@ function connect(header) {
             }
         }
 
-        if (data.command === "acm") {
+        if (command === "mrm") {
+            // Attack removed
+            const content = JSON.parse(data.content);
+
+            const attackId = content["MID"];
+            const attack = attacksLogged.find((attack) => attack.id === attackId);
+            if (!attack) return;
+
+            const embed = {
+                title: `${attack.attacker} a retiré son attaque sur ${attack.attacked}`,
+                description: `
+                    L'attaque qui devait arriver le <t:${Math.floor(
+                        attack.date.getTime() / 1000
+                    )}:R> a été retirée.
+                `,
+                color: 2278750,
+            };
+
+            const webhookData = {
+                embeds: [embed],
+            };
+
+            try {
+                const res = await fetch(`${webhookUrlAttacks}/messages/${attack.messageId}`, {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(webhookData),
+                });
+            } catch (error) {
+                console.log(error);
+            }
+        }
+
+        if (command === "acm") {
             // Alliance chat message
             return;
 
@@ -384,7 +438,7 @@ function connect(header) {
             }
         }
 
-        if (data.command === "all") {
+        if (command === "all") {
             // Alliance logs
             return;
 
@@ -414,26 +468,26 @@ function connect(header) {
 
     socket.addEventListener("error", (event) => {
         if (["ENOTFOUND", "ETIMEDOUT"].includes(event.error.code)) {
-            servers[header].reconnect = false;
+            server.reconnect = false;
         }
 
         socket.close();
     });
 
     socket.addEventListener("close", (event) => {
-        if (servers[header].reconnect) {
-            setTimeout(() => connect(header), 10000);
+        if (server.reconnect) {
+            setTimeout(() => connect(), 10000);
         } else {
-            console.log(`Socket ${header} closed permanently.`);
-            delete servers[header];
+            console.log(`Socket closed permanently.`);
+            server = {};
         }
     });
 }
 
-function pingSocket(socket, header) {
-    if (socket.readyState != WebSocket.CLOSED && socket.readyState != WebSocket.CLOSING) {
-        console.log(`Pinging socket ${header}`);
-        socket.send(`%xt%${header}%pin%1%<RoundHouseKick>%`);
-        setTimeout(() => pingSocket(socket, header), 60000);
+function pingSocket() {
+    if (![WebSocket.CLOSED, WebSocket.CLOSING].includes(server.socket.readyState)) {
+        console.log(`Pinging socket...`);
+        server.socket.send(`%xt%${server.zone}%pin%1%<RoundHouseKick>%`);
+        setTimeout(() => pingSocket(), 60000);
     }
 }

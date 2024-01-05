@@ -8,9 +8,9 @@ const players = [
         discordIds: ["867093779844431922"],
         telephone: {
             number: "+33618141676",
-            minTroops: 10,
+            minTroops: 100,
             sms: true,
-            call: true,
+            call: false,
         },
     },
     {
@@ -43,8 +43,8 @@ const players = [
         discordIds: ["312679316645216257"],
         telephone: {
             number: "+33671988962",
-            minTroops: 10,
-            sms: true,
+            minTroops: 1000,
+            sms: false,
             call: false,
         },
     },

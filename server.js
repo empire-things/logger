@@ -387,7 +387,7 @@ function connect() {
             const embed = {
                 title: `${attack.attacker} a retiré son attaque sur ${attack.attacked}`,
                 description: `
-                    L'attaque qui devait arriver le <t:${Math.floor(
+                    L'attaque qui devait arriver <t:${Math.floor(
                         attack.date.getTime() / 1000
                     )}:R> a été retirée.
                 `,

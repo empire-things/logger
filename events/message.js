@@ -6,6 +6,8 @@ export const execute = async (event) => {
 
     // Ignore messages from other channels
     if (event.channel.id !== channelIdToUse) return;
+    // If author is a bot, ignore
+    if (event.author.bot) return;
 
     const author = event.author;
     const content = event.content;

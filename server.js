@@ -38,6 +38,22 @@ const allianceLogsRead = [];
 const phoneMessagesSent = [];
 let alreadyLoggedFirstAllianceLogs = false;
 
+const currentEvent = 51; // 5 is for samurai
+let allianceMembers = [];
+let samuraiRankings = [];
+let nomadRankings = [];
+const lastRanks = {
+    1: undefined,
+    2: undefined,
+    3: undefined,
+    4: undefined,
+    5: undefined,
+};
+
+function allRanksAreDefined() {
+    return Object.keys(lastRanks).every((key) => lastRanks[key]);
+}
+
 getUnits()
     .then((units) => {
         soldiers = units.soldiers;
@@ -54,6 +70,7 @@ function connect() {
         login(socket, username, password, allianceId);
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
+        socket.send(`%xt%EmpireEx_3%ain%1%{"AID":163094}%`);
         // Check alliance logs every minute
         socket.send(`%xt%EmpireEx_3%all%1%{}%`);
         setInterval(() => socket.send(`%xt%EmpireEx_3%all%1%{}%`), 60000);
@@ -84,6 +101,90 @@ function connect() {
             } else {
                 server.reconnect = false;
                 socket.close();
+            }
+        }
+
+        if (command === "ain") {
+            // Alliance info
+            const content = JSON.parse(data.content);
+            const members = content["A"]["M"];
+
+            allianceMembers = members.map((member) => {
+                return {
+                    id: member["OID"],
+                    username: member["N"],
+                    level: member["L"],
+                    legendaryLevel: member["LL"],
+                };
+            });
+
+            // Get alliance members' ranks
+
+            // socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${1},"SV":"1"}%`);
+            // await new Promise((resolve) => setTimeout(resolve, 20000));
+
+            // socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${2},"SV":"1"}%`);
+            // await new Promise((resolve) => setTimeout(resolve, 20000));
+
+            // socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${3},"SV":"1"}%`);
+            // await new Promise((resolve) => setTimeout(resolve, 20000));
+
+            // socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${4},"SV":"1"}%`);
+            // await new Promise((resolve) => setTimeout(resolve, 20000));
+
+            // socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${5},"SV":"1"}%`);
+            // await new Promise((resolve) => setTimeout(resolve, 50000));
+
+            // // Sort by score
+            // samuraiRankings.sort((a, b) => b.score - a.score);
+
+            // // log
+            // samuraiRankings.forEach((player) => {
+            //     console.log(`${player.username} - ${player.score}`);
+            // });
+        }
+
+        if (command === "hgh") {
+            const content = JSON.parse(data.content);
+            const groupId = content["LID"];
+
+            if (lastRanks[groupId]) {
+                const players = content["L"];
+
+                players.forEach((array) => {
+                    const player = array[2];
+                    const playerId = player["OID"];
+                    const playerUsername = player["N"];
+
+                    if (allianceMembers.find((member) => member.id === playerId)) {
+                        console.log("BINGO");
+                        const rank = array[0];
+                        const score = array[1];
+
+                        samuraiRankings.push({
+                            id: playerId,
+                            username: playerUsername,
+                            rank,
+                            score,
+                        });
+                    }
+                });
+            } else {
+                lastRanks[groupId] = content["LR"];
+
+                // Need to send the request enough times to get all the rankings
+                // It shows 8 per request
+                let i = 1;
+
+                while (i < content["LR"]) {
+                    // Wait a bit before sending each request
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+                    socket.send(
+                        `%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${groupId},"SV":"${i}"}%`
+                    );
+
+                    i += 8;
+                }
             }
         }
 
@@ -391,33 +492,27 @@ function connect() {
 
         if (command === "acm") {
             // Alliance chat message
-            return;
 
             const content = JSON.parse(data.content);
 
             const sender = content["CM"]["PN"];
             const message = sanitize(content["CM"]["MT"]);
 
-            const webhookData = {
-                content: `**${sender}**: ${message}`,
-            };
+            if (sender === "Vroom") return;
 
-            const threadId = "1191570871995879474";
+            const webhookData = {
+                content: `[${new Date().toLocaleTimeString("fr-FR")}] ${sender}: ${message}`,
+            };
 
             try {
                 // Use string params for threadId
-                const res = await fetch(`${webhookUrlAllianceChat}?thread_id=${threadId}`, {
+                const res = await fetch(`${webhookUrlAllianceChat}`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify(webhookData),
                 });
-
-                if (res.status !== 204) {
-                    console.log("Error while sending message to Discord.");
-                    console.log(await res.text());
-                }
             } catch (error) {
                 console.log(error);
             }

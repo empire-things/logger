@@ -18,6 +18,8 @@ export const execute = async (event) => {
     const inGameName = nickname.split(" - ")[0] || nickname;
 
     console.log(`Discord message: ${content}`);
+    if (content.match(/[\u{1F000}-\u{1FFFF}]/u)) return;
+
     sendMessageToChat(inGameName, sanitize(content));
 };
 

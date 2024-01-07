@@ -66,11 +66,9 @@ function connect() {
         login(socket, username, password, allianceId);
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        socket.send(`%xt%EmpireEx_3%acm%1%{"M":"meow"}%`);
-        socket.send(`%xt%EmpireEx_3%ain%1%{"AID":163094}%`);
         // Check alliance logs every minute
-        socket.send(`%xt%EmpireEx_3%all%1%{}%`);
-        setInterval(() => socket.send(`%xt%EmpireEx_3%all%1%{}%`), 60000);
+        // socket.send(`%xt%EmpireEx_3%all%1%{}%`);
+        // setInterval(() => socket.send(`%xt%EmpireEx_3%all%1%{}%`), 60000);
     });
 
     socket.addEventListener("message", async (event) => {
@@ -82,12 +80,9 @@ function connect() {
             content: message[5],
         };
 
-        console.log(`Command: ${command}`);
-        console.log(`Code: ${code}`);
-        console.log(`Data: ${JSON.stringify(data, null, 4)}`);
-
         if (command === "lli") {
             if (code === "0") {
+                console.log("Logged in");
                 pingSocket();
             } else if (code === "21") {
                 console.log("Reconnect");
@@ -100,6 +95,7 @@ function connect() {
             }
         } else if (command === "lre") {
             if (code === "0") {
+                console.log("Reconnected");
                 pingSocket();
             } else {
                 console.log(`Error while reconnecting: ${code}`);
@@ -622,6 +618,8 @@ function pingSocket() {
         console.log(`Pinging socket...`);
         server.socket.send(`%xt%${server.zone}%pin%1%<RoundHouseKick>%`);
         setTimeout(() => pingSocket(), 60000);
+    } else {
+        console.log(`Socket is closed, can't ping.`);
     }
 }
 

@@ -84,4 +84,12 @@ export const players = [
         username: "Isapioche",
         discordIds: ["599980508100689948"],
     },
+    {
+        username: "Tienou",
+        discordIds: ["687930236821962771"],
+    },
+    {
+        username: "diego.lauff",
+        discordIds: ["645311249847943201"],
+    },
 ];

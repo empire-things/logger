@@ -38,10 +38,10 @@ const allianceLogsRead = [];
 const phoneMessagesSent = [];
 let alreadyLoggedFirstAllianceLogs = false;
 
-const currentEvent = 51; // 5 is for samurai
+// const currentEvent = 51; // samurai event
+const currentEvent = 46; // nomad event
 let allianceMembers = [];
-let samuraiRankings = [];
-let nomadRankings = [];
+let rankings = [];
 const lastRanks = {
     1: undefined,
     2: undefined,
@@ -49,10 +49,6 @@ const lastRanks = {
     4: undefined,
     5: undefined,
 };
-
-function allRanksAreDefined() {
-    return Object.keys(lastRanks).every((key) => lastRanks[key]);
-}
 
 getUnits()
     .then((units) => {
@@ -136,10 +132,21 @@ function connect() {
             // await new Promise((resolve) => setTimeout(resolve, 50000));
 
             // // Sort by score
-            // samuraiRankings.sort((a, b) => b.score - a.score);
+            // rankings.sort((a, b) => b.score - a.score);
+
+            // // Add players that aren't in the rankings, with a score of 0
+            // allianceMembers.forEach((member) => {
+            //     if (!rankings.find((player) => player.id === member.id)) {
+            //         rankings.push({
+            //             id: member.id,
+            //             username: member.username,
+            //             score: 0,
+            //         });
+            //     }
+            // });
 
             // // log
-            // samuraiRankings.forEach((player) => {
+            // rankings.forEach((player) => {
             //     console.log(`${player.username} - ${player.score}`);
             // });
         }
@@ -156,12 +163,14 @@ function connect() {
                     const playerId = player["OID"];
                     const playerUsername = player["N"];
 
-                    if (allianceMembers.find((member) => member.id === playerId)) {
-                        console.log("BINGO");
+                    if (
+                        allianceMembers.find((member) => member.id === playerId) &&
+                        !rankings.find((player) => player.id === playerId)
+                    ) {
                         const rank = array[0];
                         const score = array[1];
 
-                        samuraiRankings.push({
+                        rankings.push({
                             id: playerId,
                             username: playerUsername,
                             rank,
@@ -315,10 +324,42 @@ function connect() {
 
             const arrivalDateRelative = `<t:${Math.floor(date.getTime() / 1000)}:R>`;
 
+            const firstPosition = content["M"][0]["M"]["KID"];
+            const secondPosition = content["M"][0]["M"]["TA"][0];
+            const positions = {
+                "01": "Château Principal",
+                "04": "Avant-poste",
+                212: "Glaces",
+                112: "Sables",
+                312: "Pics",
+                412: "CP Iles",
+                424: "Ile a ressources",
+            };
+
+            if (firstPosition === 4) {
+                // Storm Islands, don't care
+                return;
+            }
+
+            const position = positions[`${firstPosition}${secondPosition}`];
+            const positionName = content["M"][0]["M"]["TA"][firstPosition === 4 ? 6 : 10];
+
+            const nomCommandant = content["M"][0]["UM"]["L"]["N"];
+
+            const isCastellan = !!content["M"][0]["UM"]["L"]["LICID"];
+            const isCapture = isCastellan && !nomCommandant;
+
+            const captureTitle = `${attackedUsername} se fait capturer un ${position} par ${attackingUsername}`;
+            const attackTitle = `${attackedUsername} se fait attaquer par ${attackingUsername}`;
+
             const notKnownDescription = `
                 Nombre de troupes estimé: ${estimatedNumberOfTroops}
 
                 Alliance: ${attackingAlliance || "Sans Alliance"}
+                Nom du commandant: ${nomCommandant || isCapture ? "Bailli" : "Commandant VIP"}
+
+                Position: ${position}
+                Nom position: ${positionName}
 
                 Temps restant: ${timeRemaining}
                 Date d'arrivée: ${arrivalDateRelative}
@@ -326,6 +367,10 @@ function connect() {
 
             const knownDescription = `
                 Alliance: ${attackingAlliance || "Sans Alliance"}
+                Nom du commandant: ${nomCommandant || isCapture ? "Bailli" : "Commandant VIP"}
+
+                Position: ${position}
+                Nom position: ${positionName}
 
                 Nombre total de troupes: ${numberOfTroops.total}
                 Nombre total d'engins: ${numberOfTools.total}
@@ -347,7 +392,7 @@ function connect() {
             `;
 
             const embed = {
-                title: `${attackedUsername} se fait attaquer par ${attackingUsername}`,
+                title: isCapture ? captureTitle : attackTitle,
                 description: estimatedNumberOfTroops ? notKnownDescription : knownDescription,
                 color: 14427686,
             };

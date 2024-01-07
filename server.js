@@ -66,6 +66,7 @@ function connect() {
         login(socket, username, password, allianceId);
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
+        socket.send(`%xt%EmpireEx_3%acm%1%{"M":"meow"}%`);
         socket.send(`%xt%EmpireEx_3%ain%1%{"AID":163094}%`);
         // Check alliance logs every minute
         socket.send(`%xt%EmpireEx_3%all%1%{}%`);

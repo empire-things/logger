@@ -91,5 +91,6 @@ export const players = [
     {
         username: "diego.lauff",
         discordIds: ["645311249847943201"],
+        minTroops: 500,
     },
 ];

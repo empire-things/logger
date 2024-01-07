@@ -38,8 +38,8 @@ const allianceLogsRead = [];
 const phoneMessagesSent = [];
 let alreadyLoggedFirstAllianceLogs = false;
 
-// const currentEvent = 51;
-const currentEvent = 46;
+// const currentEvent = 51; // samurai event
+const currentEvent = 46; // nomad event
 let allianceMembers = [];
 let rankings = [];
 const lastRanks = {
@@ -81,20 +81,25 @@ function connect() {
             content: message[5],
         };
 
+        console.log(`Command: ${command}`);
+
         if (command === "lli") {
             if (code === "0") {
                 pingSocket();
             } else if (code === "21") {
+                console.log("Reconnect");
                 socket.send(
                     `%xt%${server.zone}%lre%1%{"DID":0,"CONM":515,"RTM":60,"campainPId":-1,"campainCr":-1,"campainLP":-1,"adID":-1,"timeZone":14,"username":"${username}","email":null,"password":"${password}","accountId":"${accountId}","ggsLanguageCode":"en","referrer":"https://empire.goodgamestudios.com","distributorId":0,"connectionTime":515,"roundTripTime":60,"campaignVars":";https://empire.goodgamestudios.com;;;;;;-1;-1;;1681390746855129824;0;;;;;","campaignVars_adid":"-1","campaignVars_lp":"-1","campaignVars_creative":"-1","campaignVars_partnerId":"-1","campaignVars_websiteId":"0","timezone":14,"PN":"${username}","PW":"${password}","REF":"https://empire.goodgamestudios.com","LANG":"fr","AID":"${allianceId}","GCI":"","SID":9,"PLFID":1,"NID":1,"IC":""}%`
                 );
             } else {
+                console.log(`Error while logging in: ${code}`);
                 socket.close();
             }
         } else if (command === "lre") {
             if (code === "0") {
                 pingSocket();
             } else {
+                console.log(`Error while reconnecting: ${code}`);
                 server.reconnect = false;
                 socket.close();
             }
@@ -116,39 +121,39 @@ function connect() {
 
             // Get alliance members' ranks
 
-            // socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${1},"SV":"1"}%`);
-            // await new Promise((resolve) => setTimeout(resolve, 20000));
+            socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${1},"SV":"1"}%`);
+            await new Promise((resolve) => setTimeout(resolve, 20000));
 
-            // socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${2},"SV":"1"}%`);
-            // await new Promise((resolve) => setTimeout(resolve, 20000));
+            socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${2},"SV":"1"}%`);
+            await new Promise((resolve) => setTimeout(resolve, 20000));
 
-            // socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${3},"SV":"1"}%`);
-            // await new Promise((resolve) => setTimeout(resolve, 20000));
+            socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${3},"SV":"1"}%`);
+            await new Promise((resolve) => setTimeout(resolve, 20000));
 
-            // socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${4},"SV":"1"}%`);
-            // await new Promise((resolve) => setTimeout(resolve, 20000));
+            socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${4},"SV":"1"}%`);
+            await new Promise((resolve) => setTimeout(resolve, 20000));
 
-            // socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${5},"SV":"1"}%`);
-            // await new Promise((resolve) => setTimeout(resolve, 50000));
+            socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${5},"SV":"1"}%`);
+            await new Promise((resolve) => setTimeout(resolve, 50000));
 
-            // // Sort by score
-            // rankings.sort((a, b) => b.score - a.score);
+            // Sort by score
+            rankings.sort((a, b) => b.score - a.score);
 
-            // // Add players that aren't in the rankings, with a score of 0
-            // allianceMembers.forEach((member) => {
-            //     if (!rankings.find((player) => player.id === member.id)) {
-            //         rankings.push({
-            //             id: member.id,
-            //             username: member.username,
-            //             score: 0,
-            //         });
-            //     }
-            // });
+            // Add players that aren't in the rankings, with a score of 0
+            allianceMembers.forEach((member) => {
+                if (!rankings.find((player) => player.id === member.id)) {
+                    rankings.push({
+                        id: member.id,
+                        username: member.username,
+                        score: 0,
+                    });
+                }
+            });
 
-            // // Log
-            // rankings.forEach((player) => {
-            //     console.log(`${player.username} - ${player.score}`);
-            // });
+            // Log
+            rankings.forEach((player) => {
+                console.log(`${player.username} - ${player.score}`);
+            });
         }
 
         if (command === "hgh") {
@@ -356,7 +361,7 @@ function connect() {
                 Nombre de troupes estimé: ${estimatedNumberOfTroops}
 
                 Alliance: ${attackingAlliance || "Sans Alliance"}
-                Nom du commandant: ${nomCommandant || isCapture ? "Bailli" : "Commandant VIP"}
+                Nom du commandant: ${nomCommandant || (isCapture ? "Bailli" : "Commandant VIP")}
 
                 Position: ${position}
                 Nom position: ${positionName}
@@ -367,7 +372,7 @@ function connect() {
 
             const knownDescription = `
                 Alliance: ${attackingAlliance || "Sans Alliance"}
-                Nom du commandant: ${nomCommandant || isCapture ? "Bailli" : "Commandant VIP"}
+                Nom du commandant: ${nomCommandant || (isCapture ? "Bailli" : "Commandant VIP")}
 
                 Position: ${position}
                 Nom position: ${positionName}

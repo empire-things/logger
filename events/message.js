@@ -1,4 +1,5 @@
 import { sendMessageToChat } from "../lib/functions.js";
+import { sanitize } from "../lib/string.js";
 import { Events } from "discord.js";
 
 export const execute = async (event) => {
@@ -16,7 +17,8 @@ export const execute = async (event) => {
     const nickname = event.member.nickname || author.username;
     const inGameName = nickname.split(" - ")[0] || nickname;
 
-    sendMessageToChat(inGameName, content);
+    console.log(`Discord message: ${content}`);
+    sendMessageToChat(inGameName, sanitize(content));
 };
 
 export const name = Events.MessageCreate;

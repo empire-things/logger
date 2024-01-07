@@ -82,6 +82,8 @@ function connect() {
         };
 
         console.log(`Command: ${command}`);
+        console.log(`Code: ${code}`);
+        console.log(`Data: ${JSON.stringify(data, null, 4)}`);
 
         if (command === "lli") {
             if (code === "0") {

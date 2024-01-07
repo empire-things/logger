@@ -38,8 +38,8 @@ const allianceLogsRead = [];
 const phoneMessagesSent = [];
 let alreadyLoggedFirstAllianceLogs = false;
 
-// const currentEvent = 51; // samurai event
-const currentEvent = 46; // nomad event
+// const currentEvent = 51;
+const currentEvent = 46;
 let allianceMembers = [];
 let rankings = [];
 const lastRanks = {
@@ -145,7 +145,7 @@ function connect() {
             //     }
             // });
 
-            // // log
+            // // Log
             // rankings.forEach((player) => {
             //     console.log(`${player.username} - ${player.score}`);
             // });

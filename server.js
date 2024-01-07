@@ -1,3 +1,4 @@
+import { Client, Collection, GatewayIntentBits, Partials, ActivityType } from "discord.js";
 import { login, displayMessage } from "./lib/functions.js";
 import { sendSms, sendCall } from "./lib/sms-call.js";
 import { getTimeString } from "./lib/time.js";
@@ -5,6 +6,8 @@ import { getUnits } from "./lib/getData.js";
 import { players } from "./data/players.js";
 import { sanitize } from "./lib/string.js";
 import { server } from "./lib/server.js";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import WebSocket from "ws";
 import "dotenv/config";
 
@@ -600,6 +603,7 @@ function connect() {
             server.reconnect = false;
         }
 
+        console.log(`Socket error: ${event.error.code}`);
         socket.close();
     });
 
@@ -622,11 +626,6 @@ function pingSocket() {
         console.log(`Socket is closed, can't ping.`);
     }
 }
-
-import { Client, Collection, GatewayIntentBits, Partials, ActivityType } from "discord.js";
-import { readdirSync } from "node:fs";
-import { join } from "node:path";
-import "dotenv/config";
 
 const clientOptions = {
     intents: [

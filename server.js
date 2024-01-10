@@ -90,12 +90,12 @@ function connect() {
         }
 
         if (command === "gbd") {
-            const alliance = content["ain"]["A"];
+            const data = content["ain"]["A"];
 
-            alliance.id = alliance["AID"];
-            alliance.name = alliance["N"];
-            alliance.mightPoints = alliance["MP"];
-            alliance.members = alliance["M"].map((member) => ({
+            alliance.id = data["AID"];
+            alliance.name = data["N"];
+            alliance.mightPoints = data["MP"];
+            alliance.members = data["M"].map((member) => ({
                 id: member["OID"],
                 username: member["N"],
                 level: member["L"],
@@ -219,6 +219,9 @@ function connect() {
 
             const firstPlayer = content["O"][0];
             const secondPlayer = content["O"][1];
+
+            // console.log(firstPlayer, secondPlayer);
+            // console.log(alliance);
 
             if (!firstPlayer || !secondPlayer) return;
             if (firstPlayer["AID"] === secondPlayer["AID"]) return;

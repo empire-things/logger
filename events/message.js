@@ -16,6 +16,7 @@ export const execute = async (event) => {
     const inGameName = nickname.split(" - ")[0] || nickname;
 
     if (content.match(/[\u{1F000}-\u{1FFFF}]/u)) return;
+    console.log(`[${inGameName}] ${content}`);
     sendMessageToChat(inGameName, sanitize(content));
 };
 

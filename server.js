@@ -1,5 +1,5 @@
 import { Client, Collection, GatewayIntentBits, Partials, ActivityType } from "discord.js";
-import { login, displayMessage } from "./lib/functions.js";
+import { getEventRanking, login } from "./lib/functions.js";
 import { sendSms, sendCall } from "./lib/sms-call.js";
 import { getTimeString } from "./lib/time.js";
 import { getUnits } from "./lib/getData.js";
@@ -13,22 +13,13 @@ import "dotenv/config";
 
 const username = process.env.USERNAMEE;
 const password = process.env.PASSWORD;
-const accountId = process.env.ACCOUNT_ID;
-const allianceId = process.env.ALLIANCE_ID;
+const discordToken = process.env.CLIENT_TOKEN;
 
-const webhookUrlAttacks = process.env.WEBHOOK_URL_ATTACKS;
-const webhookUrlAllianceChat = process.env.WEBHOOK_URL_ALLIANCE_CHAT;
-const webhookUrlAllianceLogs = process.env.WEBHOOK_URL_ALLIANCE_LOGS;
+const chatUrl = process.env.CHAT_URL;
+const attacksUrl = process.env.ATTACKS_URL;
+const rankingsUrl = process.env.RANKINGS_URL;
 
-if (
-    !username ||
-    !password ||
-    !accountId ||
-    !allianceId ||
-    !webhookUrlAttacks ||
-    !webhookUrlAllianceChat ||
-    !webhookUrlAllianceLogs
-) {
+if (!username || !password || !discordToken) {
     throw new Error("Missing environment variables.");
 }
 
@@ -41,17 +32,11 @@ const allianceLogsRead = [];
 const phoneMessagesSent = [];
 let alreadyLoggedFirstAllianceLogs = false;
 
-// const currentEvent = 51; // samurai event
-const currentEvent = 46; // nomad event
-let allianceMembers = [];
-let rankings = [];
-const lastRanks = {
-    1: undefined,
-    2: undefined,
-    3: undefined,
-    4: undefined,
-    5: undefined,
-};
+const gameEvent = null; // 46: nomads | 51: samurais
+const rankings = [];
+const lastRanks = {};
+
+const alliance = {};
 
 getUnits()
     .then((units) => {
@@ -65,13 +50,8 @@ getUnits()
 function connect() {
     const socket = server.socket;
 
-    socket.addEventListener("open", async (event) => {
-        login(socket, username, password, allianceId);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        // Check alliance logs every minute
-        // socket.send(`%xt%EmpireEx_3%all%1%{}%`);
-        // setInterval(() => socket.send(`%xt%EmpireEx_3%all%1%{}%`), 60000);
+    socket.addEventListener("open", (event) => {
+        login(socket, username, password);
     });
 
     socket.addEventListener("message", async (event) => {
@@ -79,9 +59,11 @@ function connect() {
 
         const command = message[2];
         const code = message[4];
-        const data = {
-            content: message[5],
-        };
+        let content = message[5];
+
+        try {
+            content = JSON.parse(content || "{}");
+        } catch {}
 
         if (command === "lli") {
             if (code === "0") {
@@ -90,7 +72,7 @@ function connect() {
             } else if (code === "21") {
                 console.log("Reconnect");
                 socket.send(
-                    `%xt%${server.zone}%lre%1%{"DID":0,"CONM":515,"RTM":60,"campainPId":-1,"campainCr":-1,"campainLP":-1,"adID":-1,"timeZone":14,"username":"${username}","email":null,"password":"${password}","accountId":"${accountId}","ggsLanguageCode":"en","referrer":"https://empire.goodgamestudios.com","distributorId":0,"connectionTime":515,"roundTripTime":60,"campaignVars":";https://empire.goodgamestudios.com;;;;;;-1;-1;;1681390746855129824;0;;;;;","campaignVars_adid":"-1","campaignVars_lp":"-1","campaignVars_creative":"-1","campaignVars_partnerId":"-1","campaignVars_websiteId":"0","timezone":14,"PN":"${username}","PW":"${password}","REF":"https://empire.goodgamestudios.com","LANG":"fr","AID":"${allianceId}","GCI":"","SID":9,"PLFID":1,"NID":1,"IC":""}%`
+                    `%xt%${server.zone}%lre%1%{"DID":0,"CONM":515,"RTM":60,"campainPId":-1,"campainCr":-1,"campainLP":-1,"adID":-1,"timeZone":14,"username":"${username}","email":null,"password":"${password}","accountId":"1681390746855129824","ggsLanguageCode":"en","referrer":"https://empire.goodgamestudios.com","distributorId":0,"connectionTime":515,"roundTripTime":60,"campaignVars":";https://empire.goodgamestudios.com;;;;;;-1;-1;;1681390746855129824;0;;;;;","campaignVars_adid":"-1","campaignVars_lp":"-1","campaignVars_creative":"-1","campaignVars_partnerId":"-1","campaignVars_websiteId":"0","timezone":14,"PN":"${username}","PW":"${password}","REF":"https://empire.goodgamestudios.com","LANG":"fr","AID":"1681390746855129824","GCI":"","SID":9,"PLFID":1,"NID":1,"IC":""}%`
                 );
             } else {
                 console.log(`Error while logging in: ${code}`);
@@ -107,59 +89,67 @@ function connect() {
             }
         }
 
-        if (command === "ain") {
-            // Alliance info
-            const content = JSON.parse(data.content);
-            const members = content["A"]["M"];
+        if (command === "gbd") {
+            const alliance = content["ain"]["A"];
 
-            allianceMembers = members.map((member) => {
-                return {
-                    id: member["OID"],
-                    username: member["N"],
-                    level: member["L"],
-                    legendaryLevel: member["LL"],
+            alliance.id = alliance["AID"];
+            alliance.name = alliance["N"];
+            alliance.mightPoints = alliance["MP"];
+            alliance.members = alliance["M"].map((member) => ({
+                id: member["OID"],
+                username: member["N"],
+                level: member["L"],
+                legendaryLevel: member["LL"],
+                mightPoints: member["MP"],
+                honor: member["H"],
+            }));
+
+            if (gameEvent && rankingsUrl) {
+                await getEventRanking(socket, gameEvent);
+                rankings.sort((a, b) => b.score - a.score);
+
+                // Add players that aren't in the rankings with a score of 0
+                alliance.members.forEach((member) => {
+                    if (!rankings.find((player) => player.id === member.id)) {
+                        rankings.push({
+                            id: member.id,
+                            username: member.username,
+                            score: 0,
+                        });
+                    }
+                });
+
+                const webhookData = {
+                    content: `Event ${gameEvent} rankings:`,
+                    embeds: [
+                        {
+                            title: "Rankings",
+                            description: rankings
+                                .map(
+                                    (player, index) =>
+                                        `${index + 1}. **${player.username}** - ${player.score}`
+                                )
+                                .join("\n"),
+                            color: 14427686,
+                        },
+                    ],
                 };
-            });
 
-            // Get alliance members' ranks
-
-            socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${1},"SV":"1"}%`);
-            await new Promise((resolve) => setTimeout(resolve, 20000));
-
-            socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${2},"SV":"1"}%`);
-            await new Promise((resolve) => setTimeout(resolve, 20000));
-
-            socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${3},"SV":"1"}%`);
-            await new Promise((resolve) => setTimeout(resolve, 20000));
-
-            socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${4},"SV":"1"}%`);
-            await new Promise((resolve) => setTimeout(resolve, 20000));
-
-            socket.send(`%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${5},"SV":"1"}%`);
-            await new Promise((resolve) => setTimeout(resolve, 50000));
-
-            // Sort by score
-            rankings.sort((a, b) => b.score - a.score);
-
-            // Add players that aren't in the rankings, with a score of 0
-            allianceMembers.forEach((member) => {
-                if (!rankings.find((player) => player.id === member.id)) {
-                    rankings.push({
-                        id: member.id,
-                        username: member.username,
-                        score: 0,
+                try {
+                    const res = await fetch(rankingsUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(webhookData),
                     });
+                } catch (error) {
+                    console.log(error);
                 }
-            });
-
-            // Log
-            rankings.forEach((player) => {
-                console.log(`${player.username} - ${player.score}`);
-            });
+            }
         }
 
         if (command === "hgh") {
-            const content = JSON.parse(data.content);
             const groupId = content["LID"];
 
             if (lastRanks[groupId]) {
@@ -188,15 +178,11 @@ function connect() {
             } else {
                 lastRanks[groupId] = content["LR"];
 
-                // Need to send the request enough times to get all the rankings
-                // It shows 8 per request
                 let i = 1;
-
                 while (i < content["LR"]) {
-                    // Wait a bit before sending each request
                     await new Promise((resolve) => setTimeout(resolve, 100));
                     socket.send(
-                        `%xt%EmpireEx_3%hgh%1%{"LT":${currentEvent},"LID":${groupId},"SV":"${i}"}%`
+                        `%xt%EmpireEx_3%hgh%1%{"LT":${gameEvent},"LID":${groupId},"SV":"${i}"}%`
                     );
 
                     i += 8;
@@ -204,10 +190,10 @@ function connect() {
             }
         }
 
+        // Private message
         if (command === "sne") {
             return;
-            // Private message
-            const content = JSON.parse(data.content);
+
             const messageId = content["MSG"][0][0];
 
             messages.push({
@@ -219,65 +205,34 @@ function connect() {
             socket.send(`%xt%EmpireEx_3%rms%1%{"MID":${messageId}}%`);
         }
 
+        // Read message
         if (command === "rms") {
             return;
-            // Read message
-            const content = JSON.parse(data.content);
+
             const message = sanitize(content["MTXT"]);
             const title = messages.find((message) => message.id === content["MID"]).title;
-
-            // Could also get the sender's name
-            // Would also be great to get special messages like war announcements
-
-            displayMessage(title, message);
         }
 
-        if (command === "gam") {
-            // Attack / Support
-            const content = JSON.parse(data.content);
+        // Attack | Support
+        if (command === "gam" && attacksUrl) {
             if (!content["O"]) return;
-            const currentAllianceName = "THE INSANES"; // TODO: get alliance name programmatically
 
             const firstPlayer = content["O"][0];
             const secondPlayer = content["O"][1];
 
             if (!firstPlayer || !secondPlayer) return;
-
-            // If both players' alliance is the same, then we don't care loging the attack
             if (firstPlayer["AID"] === secondPlayer["AID"]) return;
 
-            const idOfAttackedPlayer = content["M"][0]["M"]["TA"][4];
-            const idOfAttackingPlayer = content["M"][0]["M"]["SA"][4];
+            const attackedId = content["M"][0]["M"]["TA"][4];
+            const attackerId = content["M"][0]["M"]["SA"][4];
 
-            const attackedPlayer =
-                firstPlayer["OID"] === idOfAttackedPlayer ? firstPlayer : secondPlayer;
-            const attackingPlayer =
-                firstPlayer["OID"] === idOfAttackingPlayer ? firstPlayer : secondPlayer;
+            const attacked = firstPlayer["OID"] === attackedId ? firstPlayer : secondPlayer;
+            const attacker = firstPlayer["OID"] === attackerId ? firstPlayer : secondPlayer;
 
-            const attackedUsername = attackedPlayer["N"];
-            const attackedAlliance = attackedPlayer["AN"];
+            if (attacker["AN"] === alliance.name || attacked["AN"] !== alliance.name) return;
 
-            const attackingUsername = attackingPlayer["N"];
-            const attackingAlliance = attackingPlayer["AN"];
-
-            if (
-                attackingAlliance === currentAllianceName ||
-                attackedAlliance !== currentAllianceName
-            )
-                return;
-
-            // If estimation isn't available, this means we don't know much about the attack yet
-            // Need to store the data and update it when we get the real data
-
-            const estimatedNumberOfTroops = content["M"][0]["GS"];
-            let numberOfTroops = {
-                total: 0,
-                left: 0,
-                right: 0,
-                middle: 0,
-                courtyard: 0,
-            };
-            let numberOfTools = {
+            const ent = content["M"][0]["GS"];
+            const [numberOfTroops, numberOfTools] = {
                 total: 0,
                 left: 0,
                 right: 0,
@@ -285,7 +240,7 @@ function connect() {
                 courtyard: 0,
             };
 
-            if (!estimatedNumberOfTroops && content["M"][0]["GA"]) {
+            if (!ent && content["M"][0]["GA"]) {
                 const leftSide = content["M"][0]["GA"]["L"];
                 const rightSide = content["M"][0]["GA"]["R"];
                 const middleSide = content["M"][0]["GA"]["M"];
@@ -305,7 +260,7 @@ function connect() {
                         numberOfTools.total += number;
                         numberOfTools[side] += number;
                     } else {
-                        console.log(`Unknown soldier/tool: ${id}. With number: ${number}`);
+                        console.log(`Unknown unit ${id} on ${side} side with ${number} units.`);
                     }
                 }
 
@@ -315,14 +270,13 @@ function connect() {
                 courtyard.forEach((item) => getAmount(item, "courtyard"));
             }
 
-            if (!estimatedNumberOfTroops && !numberOfTroops.total) {
+            if (!ent && !numberOfTroops.total) {
                 return;
             }
 
             const travelTime = content["M"][0]["M"]["TT"]; // in seconds
             const timeTravelled = content["M"][0]["M"]["PT"]; // in seconds
 
-            // To know when it's gonna land, substract the time travelled to the travel time
             const timeToLand = travelTime - timeTravelled;
             const timeRemaining = getTimeString(timeToLand);
 
@@ -343,27 +297,29 @@ function connect() {
                 424: "Ile a ressources",
             };
 
+            // Storm Islands, don't care
             if (firstPosition === 4) {
-                // Storm Islands, don't care
                 return;
             }
 
             const position = positions[`${firstPosition}${secondPosition}`];
             const positionName = content["M"][0]["M"]["TA"][firstPosition === 4 ? 6 : 10];
+            const attackerPositionName = content["M"][0]["M"]["SA"][firstPosition === 4 ? 6 : 10];
 
             const nomCommandant = content["M"][0]["UM"]["L"]["N"];
 
             const isCastellan = !!content["M"][0]["UM"]["L"]["LICID"];
             const isCapture = isCastellan && !nomCommandant;
 
-            const captureTitle = `${attackedUsername} se fait capturer un ${position} par ${attackingUsername}`;
-            const attackTitle = `${attackedUsername} se fait attaquer par ${attackingUsername}`;
+            const eventTitle = `${attacked["N"]} se fait attaquer pour un evenement par ${attacker["N"]}`;
+            const captureTitle = `${attacked["N"]} se fait capturer un ${position} par ${attacker["N"]}`;
+            const attackTitle = `${attacked["N"]} se fait attaquer par ${attacker["N"]}`;
 
             const notKnownDescription = `
-                Nombre de troupes estimé: ${estimatedNumberOfTroops}
+                Nombre de troupes estimé: ${ent}
 
-                Alliance: ${attackingAlliance || "Sans Alliance"}
-                Nom du commandant: ${nomCommandant || (isCapture ? "Bailli" : "Commandant VIP")}
+                Alliance: ${attacker["AN"] || "Sans Alliance"}
+                Nom du commandant: ${nomCommandant || (isCapture ? "Bailli" : "Sans nom")}
 
                 Position: ${position}
                 Nom position: ${positionName}
@@ -373,8 +329,8 @@ function connect() {
             `;
 
             const knownDescription = `
-                Alliance: ${attackingAlliance || "Sans Alliance"}
-                Nom du commandant: ${nomCommandant || (isCapture ? "Bailli" : "Commandant VIP")}
+                Alliance: ${attacker["AN"] || "Sans Alliance"}
+                Nom du commandant: ${nomCommandant || (isCapture ? "Bailli" : "Sans nom")}
 
                 Position: ${position}
                 Nom position: ${positionName}
@@ -399,16 +355,16 @@ function connect() {
             `;
 
             const embed = {
-                title: isCapture ? captureTitle : attackTitle,
-                description: estimatedNumberOfTroops ? notKnownDescription : knownDescription,
+                title: !attackerPositionName ? eventTitle : isCapture ? captureTitle : attackTitle,
+                description: ent ? notKnownDescription : knownDescription,
                 color: 14427686,
             };
 
             let message = "";
 
-            // if can find player, send a ping
-            const player = players.find((player) => player.username === attackedUsername);
-            if (player) {
+            // If can find player, send a ping
+            const player = players.find((player) => player.username === attacked["N"]);
+            if (player && attackerPositionName) {
                 if (!player.minTroops || numberOfTroops >= player.minTroops) {
                     player.discordIds.forEach((discordId) => {
                         message += `<@${discordId}> `;
@@ -423,26 +379,26 @@ function connect() {
                     try {
                         const { number, minTroops, sms, call } = player.telephone;
 
-                        if (
-                            numberOfTroops.total >= minTroops ||
-                            estimatedNumberOfTroops >= minTroops
-                        ) {
+                        if (numberOfTroops.total >= minTroops || ent >= minTroops) {
                             if (sms) {
                                 sendSms(
                                     `
-                                Vous êtes attaqués sur GGE par ${attackingUsername} de l'alliance ${attackingAlliance} !
-                                L'attaque arrivera dans ${timeRemaining} avec ${
-                                        estimatedNumberOfTroops
-                                            ? "environ " + estimatedNumberOfTroops
-                                            : numberOfTroops.total
-                                    } soldats`,
+                                    Vous êtes attaqués sur GGE par ${attacker["N"]}
+                                    de l'alliance ${attacker["AN"]} !
+                                    L'attaque arrivera dans ${timeRemaining} avec
+                                    ${ent ? "environ " + ent : numberOfTroops.total} soldats
+                                    `,
                                     number
                                 );
                             }
 
                             if (call) {
                                 sendCall(
-                                    `Vous êtes attaqués sur G G E par ${attackingUsername} !`,
+                                    `
+                                    Vous êtes attaqués sur G G E par ${attacker["N"]} !
+                                    L'attaque arrivera dans ${timeRemaining} avec
+                                    ${ent ? "environ " + ent : numberOfTroops.total} soldats
+                                    `,
                                     number
                                 );
                             }
@@ -471,18 +427,15 @@ function connect() {
                 // If already logged, update the message
                 // If not, create a new message
                 if (alreadyLogged) {
-                    const res = await fetch(
-                        `${webhookUrlAttacks}/messages/${alreadyLogged.messageId}`,
-                        {
-                            method: "PATCH",
-                            headers: {
-                                "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify(webhookData),
-                        }
-                    );
+                    const res = await fetch(`${attacksUrl}/messages/${alreadyLogged.messageId}`, {
+                        method: "PATCH",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(webhookData),
+                    });
                 } else {
-                    const res = await fetch(`${webhookUrlAttacks}?wait=true`, {
+                    const res = await fetch(`${attacksUrl}?wait=true`, {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json",
@@ -495,9 +448,9 @@ function connect() {
                     attacksLogged.push({
                         id: attackId,
                         messageId: JSON.parse(message)["id"],
-                        attacker: attackingUsername,
-                        attacked: attackedUsername,
-                        estimatedNumberOfTroops,
+                        attacker: attacker["N"],
+                        attacked: attacked["N"],
+                        ent,
                         numberOfTroops,
                         date,
                     });
@@ -507,10 +460,8 @@ function connect() {
             }
         }
 
-        if (command === "mrm") {
-            // Attack removed
-            const content = JSON.parse(data.content);
-
+        // Attack removed
+        if (command === "mrm" && attacksUrl) {
             const attackId = content["MID"];
             const attack = attacksLogged.find((attack) => attack.id === attackId);
             if (!attack) return;
@@ -521,6 +472,9 @@ function connect() {
                     L'attaque qui devait arriver <t:${Math.floor(
                         attack.date.getTime() / 1000
                     )}:R> a été retirée.
+                    Elle avait ${
+                        attack.ent ? "environ " + attack.ent : attack.numberOfTroops.total
+                    } soldats.
                 `,
                 color: 2278750,
             };
@@ -530,7 +484,7 @@ function connect() {
             };
 
             try {
-                const res = await fetch(`${webhookUrlAttacks}/messages/${attack.messageId}`, {
+                const res = await fetch(`${attacksUrl}/messages/${attack.messageId}`, {
                     method: "PATCH",
                     headers: {
                         "Content-Type": "application/json",
@@ -542,11 +496,8 @@ function connect() {
             }
         }
 
-        if (command === "acm") {
-            // Alliance chat message
-
-            const content = JSON.parse(data.content);
-
+        // Alliance chat message
+        if (command === "acm" && chatUrl) {
             const sender = content["CM"]["PN"];
             const message = sanitize(content["CM"]["MT"]);
 
@@ -557,8 +508,7 @@ function connect() {
             };
 
             try {
-                // Use string params for threadId
-                const res = await fetch(`${webhookUrlAllianceChat}`, {
+                const res = await fetch(chatUrl, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -570,11 +520,9 @@ function connect() {
             }
         }
 
+        // Alliance logs
         if (command === "all") {
-            // Alliance logs
             return;
-
-            const content = JSON.parse(data.content);
 
             // 0 - Joined alliance
             // 1 - Left alliance
@@ -612,7 +560,9 @@ function connect() {
             setTimeout(() => connect(), 10000);
         } else {
             console.log(`Socket closed permanently.`);
-            server = {};
+
+            socket.removeAllListeners();
+            process.exit(1);
         }
     });
 }
@@ -640,7 +590,7 @@ const clientOptions = {
         status: "online",
         activities: [
             {
-                name: "Playing Goodgame Empire",
+                name: "Goodgame Empire",
                 type: ActivityType.Playing,
             },
         ],
@@ -694,4 +644,4 @@ for (const folder of commandFolders) {
     }
 }
 
-client.login(process.env.CLIENT_TOKEN);
+client.login(discordToken);

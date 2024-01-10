@@ -220,9 +220,6 @@ function connect() {
             const firstPlayer = content["O"][0];
             const secondPlayer = content["O"][1];
 
-            // console.log(firstPlayer, secondPlayer);
-            // console.log(alliance);
-
             if (!firstPlayer || !secondPlayer) return;
             if (firstPlayer["AID"] === secondPlayer["AID"]) return;
 
@@ -235,7 +232,14 @@ function connect() {
             if (attacker["AN"] === alliance.name || attacked["AN"] !== alliance.name) return;
 
             const ent = content["M"][0]["GS"];
-            const [numberOfTroops, numberOfTools] = {
+            const numberOfTroops = {
+                total: 0,
+                left: 0,
+                right: 0,
+                middle: 0,
+                courtyard: 0,
+            };
+            const numberOfTools = {
                 total: 0,
                 left: 0,
                 right: 0,

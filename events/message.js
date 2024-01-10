@@ -5,10 +5,8 @@ import { Events } from "discord.js";
 export const execute = async (event) => {
     const channelIdToUse = "1192924150185066567";
 
-    // Ignore messages from other channels
-    if (event.channel.id !== channelIdToUse) return;
-    // If author is a bot, ignore
-    if (event.author.bot) return;
+    // Ignore messages from other channels and bots
+    if (event.channel.id !== channelIdToUse || event.author.bot) return;
 
     const author = event.author;
     const content = event.content;
@@ -17,9 +15,7 @@ export const execute = async (event) => {
     const nickname = event.member.nickname || author.username;
     const inGameName = nickname.split(" - ")[0] || nickname;
 
-    console.log(`Discord message: ${content}`);
     if (content.match(/[\u{1F000}-\u{1FFFF}]/u)) return;
-
     sendMessageToChat(inGameName, sanitize(content));
 };
 

@@ -503,8 +503,16 @@ function connect() {
 
             if (sender === "Vroom") return;
 
+            // Date must be the current date in France
+            const date = new Intl.DateTimeFormat("fr-FR", {
+                timeZone: "Europe/Paris",
+                hour: "numeric",
+                minute: "numeric",
+                second: "numeric",
+            }).format(new Date());
+
             const webhookData = {
-                content: `[${new Date().toLocaleTimeString("fr-FR")}] ${sender}: ${message}`,
+                content: `[${date}] ${sender}: ${message}`,
             };
 
             try {

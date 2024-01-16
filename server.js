@@ -14,6 +14,7 @@ import "dotenv/config";
 const username = process.env.USERNAMEE;
 const password = process.env.PASSWORD;
 const discordToken = process.env.CLIENT_TOKEN;
+const useDiscordBot = false;
 
 const chatUrl = process.env.CHAT_URL;
 const attacksUrl = process.env.ATTACKS_URL;
@@ -90,6 +91,7 @@ function connect() {
         }
 
         if (command === "gbd") {
+            if (!content["ain"]) return;
             const data = content["ain"]["A"];
 
             alliance.id = data["AID"];
@@ -479,7 +481,7 @@ function connect() {
                     L'attaque qui devait arriver <t:${Math.floor(
                         attack.date.getTime() / 1000
                     )}:R> a été retirée.
-                    Elle avait ${
+                    Elle comportait ${
                         attack.ent ? "environ " + attack.ent : attack.numberOfTroops.total
                     } soldats.
                 `,
@@ -659,4 +661,6 @@ for (const folder of commandFolders) {
     }
 }
 
-client.login(discordToken);
+if (useDiscordBot) {
+    client.login(discordToken);
+}
